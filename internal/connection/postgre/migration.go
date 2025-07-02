@@ -1,7 +1,7 @@
 package postgre
 
 const MigrationQuery = `
-	CREATE TABLE users (
+	CREATE TABLE IF NOT EXISTS users (
 		id SERIAL PRIMARY KEY,
 		login VARCHAR(255) UNIQUE NOT NULL,
 		pwd_hash TEXT NOT NULL,
@@ -9,7 +9,7 @@ const MigrationQuery = `
 		last_update TIMESTAMP DEFAULT NOW()
 	);
 	-- Таблица логинов и паролей для сайтов
-	CREATE TABLE logins_data (
+	CREATE TABLE IF NOT EXISTS logins_data (
 		id SERIAL PRIMARY KEY,
 		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
 		service_name VARCHAR(255) NOT NULL,
@@ -20,7 +20,7 @@ const MigrationQuery = `
 		metadata TEXT
 	);
 	
-	CREATE TABLE text_data (
+	CREATE TABLE IF NOT EXISTS text_data (
 		id SERIAL PRIMARY KEY,
 		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
 		data TEXT NOT NULL,
@@ -29,7 +29,7 @@ const MigrationQuery = `
 		metadata TEXT
 	);
 	
-	CREATE TABLE credit_cards_data (
+	CREATE TABLE IF NOT EXISTS credit_cards_data (
 		id SERIAL PRIMARY KEY,
 		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
 		card_id VARCHAR(255) NOT NULL,
@@ -39,7 +39,7 @@ const MigrationQuery = `
 		metadata TEXT
 	);
 	
-	CREATE TABLE files_data (
+	CREATE TABLE IF NOT EXISTS files_data (
 		id SERIAL PRIMARY KEY,
 		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
 		path VARCHAR(1024) NOT NULL,

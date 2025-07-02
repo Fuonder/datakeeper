@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"errors"
@@ -45,15 +45,21 @@ type CliOptions struct {
 	APIAddr     netAddress
 	LogLevel    string
 	DatabaseDSN string
+	HashKey     string
+	AESKey      string
 }
 
 func (f *CliOptions) String() string {
 	return fmt.Sprintf("APIAddress: %s, "+
 		"DatabaseDSN: %s, "+
-		"LogLevel: %s",
+		"LogLevel: %s, "+
+		"HashKey: %s, "+
+		"AESKey: %s",
 		f.APIAddr.String(),
 		f.DatabaseDSN,
 		f.LogLevel,
+		f.HashKey,
+		f.AESKey,
 	)
 }
 
@@ -72,6 +78,8 @@ func parseFlags() error {
 	flag.StringVar(&Flags.LogLevel, "l", "debug", "log level (debug, info, warn, error, fatal, panic)")
 	flag.StringVar(&Flags.DatabaseDSN, "d", "postgres://datakeeper:12345678@localhost:5432/datakeeper?sslmode=disable", "Database DSN")
 	flag.Var(&Flags.APIAddr, "a", "ip and port of server in format <ip>:<port>")
+	flag.StringVar(&Flags.HashKey, "h", "TEST123", "hash key")
+	flag.StringVar(&Flags.AESKey, "c", "32-byte-long-encryption-key-1234", "hash key")
 	flag.Parse()
 
 	if envRunAddr := os.Getenv("RUN_ADDRESS"); envRunAddr != "" {
@@ -85,6 +93,12 @@ func parseFlags() error {
 	}
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		Flags.LogLevel = envLogLevel
+	}
+	if envHashSecret := os.Getenv("HASH_SECRET"); envHashSecret != "" {
+		Flags.HashKey = envHashSecret
+	}
+	if envAESSecret := os.Getenv("AES_SECRET"); envAESSecret != "" {
+		Flags.AESKey = envAESSecret
 	}
 
 	return nil

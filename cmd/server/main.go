@@ -1,9 +1,14 @@
-package server
+package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/Fuonder/datakeeper.git/internal/connection/postgre"
+	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
+	"github.com/Fuonder/datakeeper.git/internal/service"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"log"
 )
 
@@ -25,6 +30,43 @@ func main() {
 }
 
 func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
+	DBConn, err := postgre.NewConnection(ctx, Flags.DatabaseDSN)
+	if err != nil {
+		return err
+	}
+
+	instance, mu, err := DBConn.GetDBInstance(ctx)
+	if err != nil {
+		return err
+	}
+
+	DBServices, err := dbservices.NewDatabaseServices([]byte(Flags.HashKey), instance, mu)
+	if err != nil {
+		return err
+	}
+
+	srv, err := service.NewService(Flags.APIAddr.String(), DBServices)
+	if err != nil {
+		return err
+	}
+
+	g := new(errgroup.Group)
+
+	g.Go(func() error {
+		err = srv.Run()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		logger.Log.Debug("exit with error", zap.Error(err))
+		cancel()
+		return err
+	}
 	return nil
 }

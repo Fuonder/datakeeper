@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/auth"
+	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/users"
 	"net/http"
@@ -13,6 +14,10 @@ import (
 type Handlers struct {
 	userSrv users.UserService
 	authSrv auth.Service
+}
+
+func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {
+	return &Handlers{} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
 }
 
 //func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {

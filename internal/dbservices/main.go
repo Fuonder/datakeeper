@@ -2,7 +2,6 @@ package dbservices
 
 import (
 	"database/sql"
-	"fmt"
 	"sync"
 
 	//"github.com/Fuonder/datakeeper.git/internal/auth"
@@ -19,7 +18,15 @@ type DatabaseServices struct {
 }
 
 func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (*DatabaseServices, error) {
-	// init user, auth, cards, files, logins, text services
+	// TODO: init user, auth, cards, files, logins, text services
+	s := &DatabaseServices{}
 
-	return nil, fmt.Errorf("not implemented")
+	DBUsers, err := users.NewDBUsers(db, mu)
+	if err != nil {
+		return s, err
+	}
+
+	s.UserSrv = users.NewUService(DBUsers)
+
+	return s, nil
 }
