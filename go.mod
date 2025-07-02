@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.27.0

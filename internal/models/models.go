@@ -10,7 +10,7 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-// User представляет таблицу users
+// User представляет таблицу users.
 type User struct {
 	ID         int       `json:"id"`
 	Login      string    `json:"login"`
@@ -19,7 +19,7 @@ type User struct {
 	LastUpdate time.Time `json:"last_update,omitempty"`
 }
 
-// LoginData представляет таблицу logins_data
+// LoginData представляет таблицу logins_data.
 type LoginData struct {
 	ID           int       `json:"id"`
 	UserID       int       `json:"user_id"`
@@ -31,7 +31,7 @@ type LoginData struct {
 	Metadata     string    `json:"metadata,omitempty"`
 }
 
-// TextData представляет таблицу text_data
+// TextData представляет таблицу text_data.
 type TextData struct {
 	ID         int       `json:"id"`
 	UserID     int       `json:"user_id"`
@@ -41,7 +41,7 @@ type TextData struct {
 	Metadata   string    `json:"metadata,omitempty"`
 }
 
-// CreditCardData представляет таблицу credit_cards_data
+// CreditCardData представляет таблицу credit_cards_data.
 type CreditCardData struct {
 	ID         int       `json:"id"`
 	UserID     int       `json:"user_id"`
@@ -52,7 +52,7 @@ type CreditCardData struct {
 	Metadata   string    `json:"metadata,omitempty"`
 }
 
-// FileData представляет таблицу files_data
+// FileData представляет таблицу files_data.
 type FileData struct {
 	ID         int       `json:"id"`
 	UserID     int       `json:"user_id"`
@@ -61,4 +61,12 @@ type FileData struct {
 	CreatedAt  time.Time `json:"created_at"`
 	LastUpdate time.Time `json:"last_update,omitempty"`
 	Metadata   string    `json:"metadata,omitempty"`
+}
+
+// ObjectList представляет собой список всех доступных объектов пользователя.
+type ObjectList struct {
+	LoginObjects      []LoginData      `json:"login_objects,omitempty"`
+	TextObjects       []TextData       `json:"text_objects,omitempty"`
+	CreditCardObjects []CreditCardData `json:"card_objects,omitempty"`
+	FileObjects       []FileData       `json:"file_objects,omitempty"`
 }
