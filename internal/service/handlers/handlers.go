@@ -11,6 +11,8 @@ import (
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/models"
 	"github.com/Fuonder/datakeeper.git/internal/objects/cards"
+	"github.com/Fuonder/datakeeper.git/internal/objects/logins"
+	"github.com/Fuonder/datakeeper.git/internal/objects/text"
 	"github.com/Fuonder/datakeeper.git/internal/users"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -25,6 +27,8 @@ type Handlers struct {
 	authSrv   auth.Service
 	cipherSrv cipher.Service
 	cardSrv   cards.Service
+	loginSrv  logins.Service
+	textSrv   text.Service
 }
 
 func NewHandlers(
@@ -34,7 +38,9 @@ func NewHandlers(
 		userSrv:   DBServices.UserSrv,
 		authSrv:   DBServices.AuthSrv,
 		cipherSrv: cryptoService,
-		cardSrv:   DBServices.CardSrv} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+		cardSrv:   DBServices.CardSrv,
+		loginSrv:  DBServices.LoginSrv,
+		textSrv:   DBServices.TextSrv} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
 
 }
 
@@ -192,7 +198,59 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) SaveLoginHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveLoginHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		return
+	}
+
+	logger.Log.Debug("Decrypting body")
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		logger.Log.Debug("Can not decrypt message", zap.Error(err))
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		return
+	}
+
+	loginObject := models.LoginData{}
+	err = json.Unmarshal(plainText, &loginObject)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte{})
+		return
+	}
+
+	loginObject.UserID = UID
+	loginObject.LastUpdate = time.Now()
+
+	respLoginObject, err := h.loginSrv.AddNewLoginRecord(ctx, loginObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respJsonBytes, err := json.Marshal(respLoginObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // GetLoginHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -207,7 +265,42 @@ func (h Handlers) SaveLoginHandlerPost(rw http.ResponseWriter, r *http.Request) 
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) GetLoginHandlerGet(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("GetLoginHandlerGet called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	loginIDString := chi.URLParam(r, "object_id")
+	loginID, err := strconv.Atoi(loginIDString)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte{})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte{})
+		return
+	}
+
+	loginObject, err := h.loginSrv.GetLoginRecord(ctx, loginID, UID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respJsonBytes, err := json.Marshal(loginObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // SaveTextHandlerPost используется для загрузки объекта типа models.TextData на сервер. Принимает данные в
@@ -220,7 +313,59 @@ func (h Handlers) GetLoginHandlerGet(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) SaveTextHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveTextHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		return
+	}
+
+	logger.Log.Debug("Decrypting body")
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		logger.Log.Debug("Can not decrypt message", zap.Error(err))
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		return
+	}
+
+	textObject := models.TextData{}
+	err = json.Unmarshal(plainText, &textObject)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte{})
+		return
+	}
+
+	textObject.UserID = UID
+	textObject.LastUpdate = time.Now()
+
+	respTextObject, err := h.textSrv.AddNewTextRecord(ctx, textObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respJsonBytes, err := json.Marshal(respTextObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // GetTextHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -234,8 +379,43 @@ func (h Handlers) SaveTextHandlerPost(rw http.ResponseWriter, r *http.Request) {
 //   - 401 Unauthorized: доступ для данного пользователя заблокирован.
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) GetTextHandlerGet(rw http.ResponseWriter, r *http.Request) {
-	logger.Log.Debug("GetLoginHandlerGet called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+	logger.Log.Debug("GetTextHandlerGet called")
+
+	textIDString := chi.URLParam(r, "object_id")
+	textID, err := strconv.Atoi(textIDString)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte{})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte{})
+		return
+	}
+
+	textObject, err := h.textSrv.GetTextRecord(ctx, textID, UID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respJsonBytes, err := json.Marshal(textObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // SaveFileHandlerPost используется для загрузки объекта типа models.FileData на сервер. Принимает данные в

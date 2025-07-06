@@ -17,7 +17,8 @@ const MigrationQuery = `
 		password_hash TEXT NOT NULL,
 		created_at TIMESTAMP DEFAULT NOW(),
 		last_update TIMESTAMP DEFAULT NOW(),
-		metadata TEXT
+		metadata TEXT,
+		CONSTRAINT unique_login_per_service_per_user UNIQUE (user_id, service_name, login)                      
 	);
 	
 	CREATE TABLE IF NOT EXISTS text_data (
@@ -26,7 +27,8 @@ const MigrationQuery = `
 		data TEXT NOT NULL,
 		created_at TIMESTAMP DEFAULT NOW(),
 		last_update TIMESTAMP DEFAULT NOW(),
-		metadata TEXT
+		metadata TEXT,
+		CONSTRAINT unique_text_per_user UNIQUE (user_id, data)
 	);
 	
 	CREATE TABLE IF NOT EXISTS credit_cards_data (

@@ -45,19 +45,285 @@ func tester() {
 	// RegisterTest()
 
 	// login
-	// LoginTest()
+	LoginTest()
 
-	// add card data
-	// AddCardTest()
+	// add data
+	AddCardTest()
+	AddLoginTest()
+	AddTextTest()
 
-	// modify card data
-	// UpdateCardTest()
+	// modify data
+	UpdateCardTest()
+	UpdateLoginTest()
+	UpdateTextTest()
 
-	// get card by id
+	// get by id
 	GetCardTest()
+	GetLoginTest()
+	GetTextTest()
 
 	// get data
 
+}
+
+func AddLoginTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	login := models.LoginData{
+		ID:           0,
+		UserID:       0,
+		ServiceName:  "github.com",
+		Login:        "user@example.com",
+		PasswordHash: "hashed-password",
+		Metadata:     "GitHub credentials",
+	}
+
+	jsonBytes, err := json.Marshal(login)
+	if err != nil {
+		panic(err)
+	}
+	cipherText, err := cipherService.Encrypt(jsonBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/octet-stream").
+		SetBody(string(cipherText)).
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Post("http://" + Flags.APIAddr.String() + "/data/login")
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var updatedLogin models.LoginData
+	if err := json.Unmarshal(respBytes, &updatedLogin); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Updated login", zap.Any("login", updatedLogin))
+}
+func UpdateLoginTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	login := models.LoginData{
+		ID:           1,
+		UserID:       0,
+		ServiceName:  "github.com",
+		Login:        "user@example.com",
+		PasswordHash: "hashed-password222222",
+		Metadata:     "GitHub credentials33333",
+	}
+
+	jsonBytes, err := json.Marshal(login)
+	if err != nil {
+		panic(err)
+	}
+	cipherText, err := cipherService.Encrypt(jsonBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/octet-stream").
+		SetBody(string(cipherText)).
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Post("http://" + Flags.APIAddr.String() + "/data/login")
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var updatedLogin models.LoginData
+	if err := json.Unmarshal(respBytes, &updatedLogin); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Updated login", zap.Any("login", updatedLogin))
+}
+func GetLoginTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	resp, err := client.R().
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Get(fmt.Sprintf("http://%s/data/login/%d", Flags.APIAddr.String(), 1))
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var login models.LoginData
+	if err := json.Unmarshal(respBytes, &login); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Fetched login", zap.Any("login", login))
+}
+
+func AddTextTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	text := models.TextData{
+		ID:       0,
+		UserID:   0,
+		Data:     "This is a secret note",
+		Metadata: "some metadata about text",
+	}
+
+	jsonBytes, err := json.Marshal(text)
+	if err != nil {
+		panic(err)
+	}
+	cipherText, err := cipherService.Encrypt(jsonBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/octet-stream").
+		SetBody(string(cipherText)).
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Post("http://" + Flags.APIAddr.String() + "/data/text")
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var updatedText models.TextData
+	if err := json.Unmarshal(respBytes, &updatedText); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Updated text", zap.Any("text", updatedText))
+}
+func UpdateTextTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	text := models.TextData{
+		ID:       1,
+		UserID:   0,
+		Data:     "This is a secret note",
+		Metadata: "some metadata about text 222222222",
+	}
+
+	jsonBytes, err := json.Marshal(text)
+	if err != nil {
+		panic(err)
+	}
+	cipherText, err := cipherService.Encrypt(jsonBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/octet-stream").
+		SetBody(string(cipherText)).
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Post("http://" + Flags.APIAddr.String() + "/data/text")
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var updatedText models.TextData
+	if err := json.Unmarshal(respBytes, &updatedText); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Updated text", zap.Any("text", updatedText))
+}
+func GetTextTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	resp, err := client.R().
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Get(fmt.Sprintf("http://%s/data/text/%d", Flags.APIAddr.String(), 1))
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var text models.TextData
+	if err := json.Unmarshal(respBytes, &text); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Fetched text", zap.Any("text", text))
 }
 
 func AddCardTest() {
