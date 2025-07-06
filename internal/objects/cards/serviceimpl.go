@@ -42,14 +42,6 @@ const (
 	`
 )
 
-//type DatabaseCards interface {
-//	AddNewCardRecord(ctx context.Context, cardObject models.CreditCardData) error
-//	UpdateCardRecord(ctx context.Context, cardObject models.CreditCardData) error
-//	GetCardRecord(ctx context.Context, cardID int, userID int) (cardRecord models.CreditCardData, err error)
-//	GetUserCardRecords(ctx context.Context, userID int) (cardRecords []models.CreditCardData, err error)
-//	DeleteCardRecord(ctx context.Context, cardID int) error
-//}
-
 type DBCards struct {
 	db *sql.DB
 	mu *sync.RWMutex
@@ -80,7 +72,7 @@ func (c *DBCards) AddNewCardRecord(
 	}
 
 	if err == nil {
-		// Карта уже есть — делаем обновление
+		// UPDATE
 		card.ID = existingID
 		if err := c.UpdateCardRecord(ctx, tx, card); err != nil {
 			return models.CreditCardData{}, fmt.Errorf("update via add failed: %w", err)
@@ -91,7 +83,7 @@ func (c *DBCards) AddNewCardRecord(
 		return card, nil
 	}
 
-	// Вставка новой карты
+	// INSERT NEW
 	err = tx.QueryRowContext(
 		ctx, InsertNewCardQuery,
 		card.UserID, card.CardID, card.OwnerName, card.LastUpdate, card.Metadata,
