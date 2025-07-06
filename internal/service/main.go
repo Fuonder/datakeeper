@@ -15,7 +15,10 @@ type Service struct {
 	DBServices *dbservices.DatabaseServices
 }
 
-func NewService(APIAddr string, DBServices *dbservices.DatabaseServices, cipherService cipher.Service) (*Service, error) {
+func NewService(
+	APIAddr string,
+	DBServices *dbservices.DatabaseServices,
+	cipherService cipher.Service) (*Service, error) {
 
 	h := NewHandlers(DBServices, cipherService)
 	rObj := NewRouterObject(*h)

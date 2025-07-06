@@ -3,6 +3,7 @@ package dbservices
 import (
 	"database/sql"
 	"github.com/Fuonder/datakeeper.git/internal/auth"
+	"github.com/Fuonder/datakeeper.git/internal/objects/cards"
 	"sync"
 
 	//"github.com/Fuonder/datakeeper.git/internal/auth"
@@ -14,6 +15,7 @@ import (
 type DatabaseServices struct {
 	UserSrv users.UserService
 	AuthSrv auth.Service
+	CardSrv cards.Service
 	//WalletSrv wallets.WalletService
 	//OrderSrv  orders.OrderService
 	//AuthSrv   auth.AuthService
@@ -37,5 +39,10 @@ func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (*Database
 
 	s.AuthSrv = auth.NewAService(DBUsers, DBAuth, secret)
 
+	DBCards, err := cards.NewDBCards(db, mu)
+	if err != nil {
+		return s, err
+	}
+	s.CardSrv = DBCards
 	return s, nil
 }

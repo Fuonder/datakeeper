@@ -10,10 +10,13 @@ import (
 	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/models"
+	"github.com/Fuonder/datakeeper.git/internal/objects/cards"
 	"github.com/Fuonder/datakeeper.git/internal/users"
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -21,13 +24,17 @@ type Handlers struct {
 	userSrv   users.UserService
 	authSrv   auth.Service
 	cipherSrv cipher.Service
+	cardSrv   cards.Service
 }
 
-func NewHandlers(DBServices *dbservices.DatabaseServices, cryptoService cipher.Service) *Handlers {
+func NewHandlers(
+	DBServices *dbservices.DatabaseServices,
+	cryptoService cipher.Service) *Handlers {
 	return &Handlers{
 		userSrv:   DBServices.UserSrv,
 		authSrv:   DBServices.AuthSrv,
-		cipherSrv: cryptoService} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+		cipherSrv: cryptoService,
+		cardSrv:   DBServices.CardSrv} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
 
 }
 
@@ -265,11 +272,60 @@ func (h Handlers) GetFileHandlerGet(rw http.ResponseWriter, r *http.Request) {
 // Возвращает:
 //
 //   - 200 OK: Объект успешно добавлен. В ответе передается обновленный объект с установленным ID.
+//   - 400 Bad Request: некорректный формат сообщения
 //   - 401 Unauthorized: доступ для данного пользователя заблокирован.
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) SaveCardHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveCardHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+	logger.Log.Debug("reading body")
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		return
+	}
+	logger.Log.Debug("Decrypting body")
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		logger.Log.Debug("Can not decrypt message", zap.Error(err))
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		return
+	}
+	logger.Log.Debug("Unmarshalling user object")
+	cardObject := models.CreditCardData{}
+	err = json.Unmarshal(plainText, &cardObject)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	cardObject.UserID = UID
+	cardObject.LastUpdate = time.Now()
+
+	respCardObject, err := h.cardSrv.AddNewCardRecord(ctx, cardObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	respJsonBytes, err := json.Marshal(respCardObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // GetCardHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -284,7 +340,39 @@ func (h Handlers) SaveCardHandlerPost(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) GetCardHandlerGet(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("GetLoginHandlerGet called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	cardIDString := chi.URLParam(r, "object_id")
+	cardID, err := strconv.Atoi(cardIDString)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte{})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+
+	cardObject, err := h.cardSrv.GetCardRecord(ctx, cardID, UID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	respJsonBytes, err := json.Marshal(cardObject)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	SendResponse(rw, http.StatusOK, respCipherText)
 }
 
 // SendResponse вспомогательная функция, предназначенная для формирования http ответа и его отправки.

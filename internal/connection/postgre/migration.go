@@ -36,7 +36,8 @@ const MigrationQuery = `
 		owner_name VARCHAR(255) NOT NULL,
 		created_at TIMESTAMP DEFAULT NOW(),
 		last_update TIMESTAMP DEFAULT NOW(),
-		metadata TEXT
+		metadata TEXT,
+		CONSTRAINT unique_card_data UNIQUE (card_id, owner_name)
 	);
 	
 	CREATE TABLE IF NOT EXISTS files_data (
