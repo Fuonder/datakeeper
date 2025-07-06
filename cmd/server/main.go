@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/Fuonder/datakeeper.git/internal/cipher"
 	"github.com/Fuonder/datakeeper.git/internal/connection/postgre"
 	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
@@ -48,7 +49,12 @@ func run() error {
 		return err
 	}
 
-	srv, err := service.NewService(Flags.APIAddr.String(), DBServices)
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		return err
+	}
+
+	srv, err := service.NewService(Flags.APIAddr.String(), DBServices, cipherService)
 	if err != nil {
 		return err
 	}

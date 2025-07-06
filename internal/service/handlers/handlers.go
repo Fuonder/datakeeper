@@ -2,22 +2,33 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/auth"
+	"github.com/Fuonder/datakeeper.git/internal/cipher"
 	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
+	"github.com/Fuonder/datakeeper.git/internal/models"
 	"github.com/Fuonder/datakeeper.git/internal/users"
+	"go.uber.org/zap"
+	"io"
 	"net/http"
+	"time"
 )
 
 type Handlers struct {
-	userSrv users.UserService
-	authSrv auth.Service
+	userSrv   users.UserService
+	authSrv   auth.Service
+	cipherSrv cipher.Service
 }
 
-func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {
-	return &Handlers{} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+func NewHandlers(DBServices *dbservices.DatabaseServices, cryptoService cipher.Service) *Handlers {
+	return &Handlers{
+		userSrv:   DBServices.UserSrv,
+		authSrv:   DBServices.AuthSrv,
+		cipherSrv: cryptoService} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+
 }
 
 //func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {
@@ -37,7 +48,55 @@ func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {
 //   - 500 Internal Server Error: внутренняя ошибка
 func (h Handlers) RegisterHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("RegisterHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+	logger.Log.Debug("reading body")
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		return
+	}
+	logger.Log.Debug("Decrypting body")
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		logger.Log.Debug("Can not decrypt message", zap.Error(err))
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		return
+	}
+	logger.Log.Debug("Unmarshalling user object")
+	userObject := models.User{}
+	err = json.Unmarshal(plainText, &userObject)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		return
+	}
+
+	userObject.CreatedAt = time.Now()
+	userObject.LastUpdate = time.Now()
+	logger.Log.Debug("registering user")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	token, err := h.authSrv.Register(ctx, userObject)
+	if err != nil {
+		if errors.Is(err, models.ErrUserAlreadyExists) {
+			SendResponse(rw, http.StatusConflict, []byte{})
+			return
+		}
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	logger.Log.Debug("register SUCCESS, setting cookie")
+	http.SetCookie(rw, &http.Cookie{
+		Name:     "auth_token",
+		Value:    token,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	logger.Log.Debug("sending ok resp")
+	respBody, err := h.cipherSrv.Encrypt([]byte("User created successfully"))
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+	}
+	SendResponse(rw, http.StatusOK, respBody)
 }
 
 // LoginHandlerPost аутентифицирует пользователя на сервере. Принимает данные в формате
@@ -50,7 +109,54 @@ func (h Handlers) RegisterHandlerPost(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка
 func (h Handlers) LoginHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("LoginHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+	logger.Log.Debug("reading body")
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		return
+	}
+	logger.Log.Debug("Decrypting body")
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		logger.Log.Debug("Can not decrypt message", zap.Error(err))
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		return
+	}
+	logger.Log.Debug("Unmarshalling user object")
+	userObject := models.User{}
+	err = json.Unmarshal(plainText, &userObject)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		return
+	}
+
+	logger.Log.Debug("registering user")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	token, err := h.authSrv.Login(ctx, userObject)
+	if err != nil {
+		logger.Log.Debug("error", zap.Error(err))
+		if errors.Is(err, models.ErrWrongCredentials) {
+			SendResponse(rw, http.StatusUnauthorized, []byte{})
+			return
+		}
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		return
+	}
+	logger.Log.Debug("register SUCCESS, setting cookie")
+	http.SetCookie(rw, &http.Cookie{
+		Name:     "auth_token",
+		Value:    token,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	logger.Log.Debug("sending ok resp")
+	respBody, err := h.cipherSrv.Encrypt([]byte("User login success"))
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte{})
+	}
+	SendResponse(rw, http.StatusOK, respBody)
 }
 
 // DataHandlerGet возвращает список объектов, доступных пользователю на сервере.

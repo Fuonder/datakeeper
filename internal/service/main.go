@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Fuonder/datakeeper.git/internal/cipher"
 	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	. "github.com/Fuonder/datakeeper.git/internal/service/handlers"
@@ -14,9 +15,9 @@ type Service struct {
 	DBServices *dbservices.DatabaseServices
 }
 
-func NewService(APIAddr string, DBServices *dbservices.DatabaseServices) (*Service, error) {
+func NewService(APIAddr string, DBServices *dbservices.DatabaseServices, cipherService cipher.Service) (*Service, error) {
 
-	h := NewHandlers(DBServices)
+	h := NewHandlers(DBServices, cipherService)
 	rObj := NewRouterObject(*h)
 	router, err := rObj.GetRouter()
 	if err != nil {
