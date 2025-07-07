@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/models"
-	"github.com/Fuonder/datakeeper.git/internal/users"
+	"github.com/Fuonder/datakeeper.git/internal/server/users"
 	"github.com/dgrijalva/jwt-go"
 	"time"
 )

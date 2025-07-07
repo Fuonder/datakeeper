@@ -3,7 +3,7 @@ package router
 import (
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
-	"github.com/Fuonder/datakeeper.git/internal/service/handlers"
+	"github.com/Fuonder/datakeeper.git/internal/server/service/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

@@ -2,10 +2,10 @@ package service
 
 import (
 	"github.com/Fuonder/datakeeper.git/internal/cipher"
-	"github.com/Fuonder/datakeeper.git/internal/dbservices"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
-	. "github.com/Fuonder/datakeeper.git/internal/service/handlers"
-	. "github.com/Fuonder/datakeeper.git/internal/service/router"
+	"github.com/Fuonder/datakeeper.git/internal/server/dbservices"
+	. "github.com/Fuonder/datakeeper.git/internal/server/service/handlers"
+	. "github.com/Fuonder/datakeeper.git/internal/server/service/router"
 	"go.uber.org/zap"
 	"net/http"
 )

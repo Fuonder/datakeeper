@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/cipher"
+	"github.com/Fuonder/datakeeper.git/internal/client/cliservice"
+	"github.com/Fuonder/datakeeper.git/internal/client/ui"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/models"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-resty/resty/v2"
 	"github.com/ncruces/zenity"
 	"go.uber.org/zap"
@@ -17,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var (
@@ -48,11 +52,53 @@ func run() error {
 }
 
 func tester() {
+	srv, err := cliservice.NewService([]byte(Flags.AESKey), Flags.APIAddr.String(), 5*time.Second)
+	if err != nil {
+		panic(err)
+	}
+	//filePath, _ := zenity.SelectFile()
+	//
+	//fileMeta := models.FileData{
+	//	ID:       0,
+	//	UserID:   0,
+	//	Path:     filePath,  // Путь к выбранному файлу
+	//	FileType: "unknown", // Тип файла будет определен автоматически (можно использовать utils.getFileTypeFromExtension())
+	//	Metadata: "Test image file",
+	//}
+	//srv.Login(models.User{Login: Login, PwdHash: Password})
+	//srv.AddItem(fileMeta)
+	//if err != nil {
+	//	return "", err
+	//}
+
+	p := tea.NewProgram(ui.NewAuthModel(srv))
+	_, err = p.Run()
+	if err != nil {
+		panic(err)
+	}
+	//
+	//if err := p.Start(); err != nil {
+	//	fmt.Println("failed to start app:", err)
+	//	os.Exit(1)
+	//}
+
+	//go srv.Poll(context.TODO())
+	//err = srv.Login(models.User{
+	//	ID:      0,
+	//	Login:   Login,
+	//	PwdHash: Password,
+	//})
+	//if err != nil
+	//	panic(err)
+	//}
+	//time.Sleep(5 * time.Second)
+	//fmt.Println(srv.FetchData())
+
 	// register
 	//RegisterTest()
 
 	// login
-	LoginTest()
+	//LoginTest()
 
 	// add data
 	//AddCardTest()
@@ -73,7 +119,7 @@ func tester() {
 	//GetFileTest()
 
 	// get data
-	GetDataTest()
+	//GetDataTest()
 
 }
 func RegisterTest() {
