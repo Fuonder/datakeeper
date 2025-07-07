@@ -35,11 +35,6 @@ func (a *AService) Register(ctx context.Context, newUser models.User) (token str
 		return "", err
 	}
 
-	//_, err = a.uConn.GetUIDByUsername(ctx, newUser.Login)  // TODO: CHECK IF NEEDED
-	//if err != nil {
-	//	return "", err
-	//}
-
 	token, err = a.GetJWT(ctx, newUser.Login)
 	if err != nil {
 		return "", err
@@ -98,7 +93,6 @@ func (a *AService) ValidateJWT(ctx context.Context, tokenString string) error {
 
 func (a *AService) GetUIDFromJWT(ctx context.Context, tokenString string) (int, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &models.Claims{}, func(token *jwt.Token) (interface{}, error) {
-		// Ensure the token uses the correct signing method
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, fmt.Errorf("unexpected signing method %v", token.Method.Alg())
 		}

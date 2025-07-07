@@ -190,7 +190,6 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. Получаем userID из токена
 	userID, err := h.getUserID(ctx, r)
 	if err != nil {
 		SendResponse(rw, http.StatusUnauthorized, []byte("unauthorized"))
@@ -203,8 +202,6 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		ccrd []models.CreditCardData
 		f    []models.FileData
 	)
-
-	// 2. Получаем все доступные пользователю данные (ошибки не критичны по отдельности)
 	if loginData, err := h.loginSrv.GetUserLoginRecords(ctx, userID); err == nil {
 		lg = loginData
 	}
@@ -221,13 +218,11 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		f = fileData
 	}
 
-	// 3. Проверяем, есть ли хотя бы один объект
 	if len(lg) == 0 && len(txt) == 0 && len(ccrd) == 0 && len(f) == 0 {
 		SendResponse(rw, http.StatusNoContent, nil)
 		return
 	}
 
-	// 4. Формируем структуру
 	result := models.ObjectList{
 		LoginObjects:      lg,
 		TextObjects:       txt,
@@ -235,21 +230,17 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		FileObjects:       f,
 	}
 
-	// 5. Сериализуем в JSON
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
 		SendResponse(rw, http.StatusInternalServerError, []byte("failed to marshal data"))
 		return
 	}
 
-	// 6. Шифруем JSON
 	cipherText, err := h.cipherSrv.Encrypt(jsonBytes)
 	if err != nil {
 		SendResponse(rw, http.StatusInternalServerError, []byte("failed to encrypt data"))
 		return
 	}
-
-	// 7. Отправляем зашифрованный ответ
 
 	rw.Header().Set("Content-Type", "application/octet-stream")
 	SendResponse(rw, http.StatusOK, cipherText)

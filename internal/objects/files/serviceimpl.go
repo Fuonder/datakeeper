@@ -48,14 +48,13 @@ func (d *DBFiles) AddOrUpdateFileRecord(ctx context.Context, file models.FileDat
 	}
 	defer tx.Rollback()
 
-	// Проверяем, существует ли уже файл с таким ID
 	var existingID int
 	err = tx.QueryRowContext(ctx, CheckFileExistsQuery, file.ID, file.UserID).Scan(&existingID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return models.FileData{}, err
 	}
 
-	if err == nil { // Если файл существует, обновляем его
+	if err == nil { // update existing
 		file.ID = existingID
 		if err := d.UpdateFileRecord(ctx, tx, file); err != nil {
 			return models.FileData{}, err
@@ -67,7 +66,7 @@ func (d *DBFiles) AddOrUpdateFileRecord(ctx context.Context, file models.FileDat
 		return file, nil
 	}
 
-	// Если файл не существует, добавляем новый
+	// New
 	err = tx.QueryRowContext(ctx, InsertNewFileQuery,
 		file.UserID, file.Path, file.FileType, file.LastUpdate, file.Metadata,
 	).Scan(&file.ID)

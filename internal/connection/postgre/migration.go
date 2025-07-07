@@ -8,7 +8,6 @@ const MigrationQuery = `
 		created_at TIMESTAMP DEFAULT NOW(),
 		last_update TIMESTAMP DEFAULT NOW()
 	);
-	-- Таблица логинов и паролей для сайтов
 	CREATE TABLE IF NOT EXISTS logins_data (
 		id SERIAL PRIMARY KEY,
 		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

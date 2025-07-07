@@ -7,12 +7,8 @@ import (
 	"github.com/Fuonder/datakeeper.git/internal/objects/files"
 	"github.com/Fuonder/datakeeper.git/internal/objects/logins"
 	"github.com/Fuonder/datakeeper.git/internal/objects/text"
-	"sync"
-
-	//"github.com/Fuonder/datakeeper.git/internal/auth"
-	//"github.com/Fuonder/datakeeper.git/internal/models"
-	//"github.com/Fuonder/datakeeper.git/internal/orders"
 	"github.com/Fuonder/datakeeper.git/internal/users"
+	"sync"
 )
 
 type DatabaseServices struct {
@@ -22,13 +18,9 @@ type DatabaseServices struct {
 	LoginSrv logins.Service
 	TextSrv  text.Service
 	FileSrv  files.Service
-	//WalletSrv wallets.WalletService
-	//OrderSrv  orders.OrderService
-	//AuthSrv   auth.AuthService
 }
 
 func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (*DatabaseServices, error) {
-	// TODO: init user, auth, cards, files, logins, text services
 	s := &DatabaseServices{}
 
 	DBUsers, err := users.NewDBUsers(db, mu)
