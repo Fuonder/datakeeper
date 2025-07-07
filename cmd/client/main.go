@@ -73,6 +73,7 @@ func tester() {
 	//GetFileTest()
 
 	// get data
+	GetDataTest()
 
 }
 func RegisterTest() {
@@ -806,6 +807,38 @@ func GetFileTest() {
 	}
 
 	logger.Log.Debug("Fetched meta", zap.Any("file", fileMeta))
+}
+
+func GetDataTest() {
+	cipherService, err := cipher.NewAES256Cipher([]byte(Flags.AESKey))
+	if err != nil {
+		panic(err)
+	}
+	client := resty.New()
+
+	resp, err := client.R().
+		SetCookie(&http.Cookie{Name: "auth_token", Value: Token}).
+		Get(fmt.Sprintf("http://%s/data", Flags.APIAddr.String()))
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		logger.Log.Debug("Error from server",
+			zap.Any("Status", resp.StatusCode()),
+			zap.Any("message", string(resp.Body())))
+		return
+	}
+
+	respBytes, err := cipherService.Decrypt(resp.Body())
+	if err != nil {
+		panic(err)
+	}
+
+	var objList models.ObjectList
+	if err := json.Unmarshal(respBytes, &objList); err != nil {
+		panic(err)
+	}
+	logger.Log.Debug("Fetched data list", zap.Any("objList", objList))
 }
 
 // "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InRlc3RVc2VyIiwiZXhwIjoxNzUxODQ1MTI5fQ.CDzhwd5hxSWmD9Yq5gg6hgYedCHHYigwT-zD6Uom_l8"

@@ -48,16 +48,9 @@ func NewHandlers(
 		loginSrv:  DBServices.LoginSrv,
 		textSrv:   DBServices.TextSrv,
 		fileSrv:   DBServices.FileSrv,
-	} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+	}
 
 }
-
-//func NewHandlers(DBServices *dbservices.DatabaseServices) *Handlers {
-//	return &Handlers{userSrv: DBServices.UserSrv,
-//		walletSrv: DBServices.WalletSrv,
-//		orderSrv:  DBServices.OrderSrv,
-//		authSrv:   DBServices.AuthSrv}
-//}
 
 // RegisterHandlerPost регистрирует и аутентифицирует пользователя на сервере. Принимает данные в формате
 // Content-Type: application/octet-stream, изначальный набор данных должен представлять собой объект типа models.User
@@ -193,7 +186,73 @@ func (h Handlers) LoginHandlerPost(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("DataHandlerGet called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Получаем userID из токена
+	userID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte("unauthorized"))
+		return
+	}
+
+	var (
+		lg   []models.LoginData
+		txt  []models.TextData
+		ccrd []models.CreditCardData
+		f    []models.FileData
+	)
+
+	// 2. Получаем все доступные пользователю данные (ошибки не критичны по отдельности)
+	if loginData, err := h.loginSrv.GetUserLoginRecords(ctx, userID); err == nil {
+		lg = loginData
+	}
+
+	if textData, err := h.textSrv.GetUserTextRecords(ctx, userID); err == nil {
+		txt = textData
+	}
+
+	if cardData, err := h.cardSrv.GetUserCardRecords(ctx, userID); err == nil {
+		ccrd = cardData
+	}
+
+	if fileData, err := h.fileSrv.GetUserFileRecords(ctx, userID); err == nil {
+		f = fileData
+	}
+
+	// 3. Проверяем, есть ли хотя бы один объект
+	if len(lg) == 0 && len(txt) == 0 && len(ccrd) == 0 && len(f) == 0 {
+		SendResponse(rw, http.StatusNoContent, nil)
+		return
+	}
+
+	// 4. Формируем структуру
+	result := models.ObjectList{
+		LoginObjects:      lg,
+		TextObjects:       txt,
+		CreditCardObjects: ccrd,
+		FileObjects:       f,
+	}
+
+	// 5. Сериализуем в JSON
+	jsonBytes, err := json.Marshal(result)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("failed to marshal data"))
+		return
+	}
+
+	// 6. Шифруем JSON
+	cipherText, err := h.cipherSrv.Encrypt(jsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("failed to encrypt data"))
+		return
+	}
+
+	// 7. Отправляем зашифрованный ответ
+
+	rw.Header().Set("Content-Type", "application/octet-stream")
+	SendResponse(rw, http.StatusOK, cipherText)
 }
 
 // SaveLoginHandlerPost используется для загрузки объекта типа models.LoginData на сервер. Принимает данные в
