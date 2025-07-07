@@ -9,17 +9,17 @@ import (
 	"log"
 )
 
-type LoginForm struct {
+type LoginFormRedact struct {
 	svc         *cliservice.Service
 	serviceName textinput.Model
 	login       textinput.Model
 	password    textinput.Model
 	metadata    textinput.Model
+	loginData   models.LoginData
 }
 
-func NewLoginFormUpload(svc *cliservice.Service) LoginForm {
+func NewLoginFormRedact(svc *cliservice.Service, obj models.LoginData) LoginFormRedact {
 	serviceName := textinput.New()
-	serviceName.Focused()
 	login := textinput.New()
 	password := textinput.New()
 	metadata := textinput.New()
@@ -28,21 +28,26 @@ func NewLoginFormUpload(svc *cliservice.Service) LoginForm {
 	login.Placeholder = "Login"
 	password.Placeholder = "Password"
 	metadata.Placeholder = "Metadata"
+	serviceName.SetValue(obj.ServiceName)
+	login.SetValue(obj.Login)
+	password.SetValue(obj.PasswordHash)
+	metadata.SetValue(obj.Metadata)
 
-	return LoginForm{
+	return LoginFormRedact{
 		svc:         svc,
 		serviceName: serviceName,
 		login:       login,
 		password:    password,
 		metadata:    metadata,
+		loginData:   obj,
 	}
 }
 
-func (m LoginForm) Init() tea.Cmd {
+func (m LoginFormRedact) Init() tea.Cmd {
 	return nil
 }
 
-func (m LoginForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m LoginFormRedact) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -51,6 +56,7 @@ func (m LoginForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 
 			loginData := models.LoginData{
+				ID:           m.loginData.ID,
 				ServiceName:  m.serviceName.Value(),
 				Login:        m.login.Value(),
 				PasswordHash: m.password.Value(),
@@ -58,7 +64,7 @@ func (m LoginForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			err := m.svc.AddItem(loginData)
 			if err != nil {
-				log.Println("Error adding login:", err)
+				log.Println("Error updating login:", err)
 			}
 			return NewMainModel(m.svc), nil
 		case "tab":
@@ -87,7 +93,7 @@ func (m LoginForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m LoginForm) View() string {
+func (m LoginFormRedact) View() string {
 	return fmt.Sprintf(
 		"ServiceName: %s\nLogin: %s\nPassword: %s\nMetadata: %s\nPress [Enter] to submit\n",
 		m.serviceName.View(),

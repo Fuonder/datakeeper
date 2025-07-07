@@ -9,32 +9,35 @@ import (
 	"log"
 )
 
-type TextForm struct {
+type TextFormRedact struct {
 	svc      *cliservice.Service
 	data     textinput.Model
 	metadata textinput.Model
+	textData models.TextData
 }
 
-func NewTextFormUpload(svc *cliservice.Service) TextForm {
+func NewTextFormRedact(svc *cliservice.Service, obj models.TextData) TextFormRedact {
 	data := textinput.New()
-	data.Focused()
 	metadata := textinput.New()
 
 	data.Placeholder = "Text Data"
 	metadata.Placeholder = "Metadata"
+	data.SetValue(obj.Data)
+	metadata.SetValue(obj.Metadata)
 
-	return TextForm{
+	return TextFormRedact{
 		svc:      svc,
 		data:     data,
 		metadata: metadata,
+		textData: obj,
 	}
 }
 
-func (m TextForm) Init() tea.Cmd {
+func (m TextFormRedact) Init() tea.Cmd {
 	return nil
 }
 
-func (m TextForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m TextFormRedact) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -43,12 +46,13 @@ func (m TextForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 
 			textData := models.TextData{
+				ID:       m.textData.ID,
 				Data:     m.data.Value(),
 				Metadata: m.metadata.Value(),
 			}
 			err := m.svc.AddItem(textData)
 			if err != nil {
-				log.Println("Error adding text:", err)
+				log.Println("Error updating text:", err)
 			}
 			return NewMainModel(m.svc), nil
 		case "tab":
@@ -69,7 +73,7 @@ func (m TextForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m TextForm) View() string {
+func (m TextFormRedact) View() string {
 	return fmt.Sprintf(
 		"Text Data: %s\nMetadata: %s\nPress [Enter] to submit\n",
 		m.data.View(),

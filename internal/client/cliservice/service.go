@@ -229,6 +229,19 @@ func (s *Service) GetFileItem(idx int) (models.FileData, error) {
 	return s.st.GetFileItemByIndex(idx)
 }
 
+func (s *Service) GetTextObjects() ([]models.TextData, error) {
+	return s.st.GetTextObjects()
+}
+func (s *Service) GetCardObjects() ([]models.CreditCardData, error) {
+	return s.st.GetCardObjects()
+}
+func (s *Service) GetLoginObjects() ([]models.LoginData, error) {
+	return s.st.GetLoginObjects()
+}
+func (s *Service) GetFileObjects() ([]models.FileData, error) {
+	return s.st.GetFileObjects()
+}
+
 func (s *Service) FetchFileItem(item models.FileData) (FileItem models.FileData, FileContents []byte, error error) {
 	resp, err := s.client.R().
 		SetDoNotParseResponse(true).

@@ -9,14 +9,15 @@ import (
 	"log"
 )
 
-type CreditCardForm struct {
+type CreditCardFormRedact struct {
 	svc       *cliservice.Service
 	cardID    textinput.Model
 	ownerName textinput.Model
 	metadata  textinput.Model
+	card      models.CreditCardData
 }
 
-func NewCreditCardFormUpload(svc *cliservice.Service) CreditCardForm {
+func NewCardFormRedact(svc *cliservice.Service, obj models.CreditCardData) CreditCardFormRedact {
 	cardID := textinput.New()
 	cardID.Focused()
 	ownerName := textinput.New()
@@ -25,20 +26,24 @@ func NewCreditCardFormUpload(svc *cliservice.Service) CreditCardForm {
 	cardID.Placeholder = "Card ID"
 	ownerName.Placeholder = "Owner Name"
 	metadata.Placeholder = "Metadata"
+	cardID.SetValue(obj.CardID)
+	ownerName.SetValue(obj.OwnerName)
+	metadata.SetValue(obj.Metadata)
 
-	return CreditCardForm{
+	return CreditCardFormRedact{
 		svc:       svc,
 		cardID:    cardID,
 		ownerName: ownerName,
 		metadata:  metadata,
+		card:      obj,
 	}
 }
 
-func (m CreditCardForm) Init() tea.Cmd {
+func (m CreditCardFormRedact) Init() tea.Cmd {
 	return nil
 }
 
-func (m CreditCardForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m CreditCardFormRedact) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -47,13 +52,14 @@ func (m CreditCardForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 
 			creditCardData := models.CreditCardData{
+				ID:        m.card.ID,
 				CardID:    m.cardID.Value(),
 				OwnerName: m.ownerName.Value(),
 				Metadata:  m.metadata.Value(),
 			}
 			err := m.svc.AddItem(creditCardData)
 			if err != nil {
-				log.Println("Error adding credit card:", err)
+				log.Println("Error updating credit card:", err)
 			}
 			return NewMainModel(m.svc), nil
 		case "tab":
@@ -78,7 +84,7 @@ func (m CreditCardForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m CreditCardForm) View() string {
+func (m CreditCardFormRedact) View() string {
 	return fmt.Sprintf(
 		"Card ID: %s\nOwner Name: %s\nMetadata: %s\nPress [Enter] to submit\n",
 		m.cardID.View(),

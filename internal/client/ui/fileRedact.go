@@ -9,32 +9,31 @@ import (
 	"log"
 )
 
-type TextForm struct {
+type FileFormRedact struct {
 	svc      *cliservice.Service
-	data     textinput.Model
 	metadata textinput.Model
+	filePath string
+	file     models.FileData
 }
 
-func NewTextFormUpload(svc *cliservice.Service) TextForm {
-	data := textinput.New()
-	data.Focused()
+func NewFileFormRedact(svc *cliservice.Service, file models.FileData) FileFormRedact {
 	metadata := textinput.New()
-
-	data.Placeholder = "Text Data"
 	metadata.Placeholder = "Metadata"
+	metadata.SetValue(file.Metadata)
 
-	return TextForm{
+	return FileFormRedact{
 		svc:      svc,
-		data:     data,
 		metadata: metadata,
+		filePath: file.Path,
+		file:     file,
 	}
 }
 
-func (m TextForm) Init() tea.Cmd {
+func (m FileFormRedact) Init() tea.Cmd {
 	return nil
 }
 
-func (m TextForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m FileFormRedact) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -42,37 +41,31 @@ func (m TextForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 
-			textData := models.TextData{
-				Data:     m.data.Value(),
+			fileData := models.FileData{
+				ID:       m.file.ID,
+				Path:     m.filePath,
 				Metadata: m.metadata.Value(),
 			}
-			err := m.svc.AddItem(textData)
+			err := m.svc.AddItem(fileData)
 			if err != nil {
-				log.Println("Error adding text:", err)
+				log.Println("Error updating file:", err)
 			}
 			return NewMainModel(m.svc), nil
 		case "tab":
 
-			if m.data.Focused() {
-				m.data.Blur()
-				m.metadata.Focus()
-			} else {
-				m.metadata.Blur()
-				m.data.Focus()
-			}
+			m.metadata.Focus()
 		}
 	}
 
-	m.data, _ = m.data.Update(msg)
 	m.metadata, _ = m.metadata.Update(msg)
 
 	return m, nil
 }
 
-func (m TextForm) View() string {
+func (m FileFormRedact) View() string {
 	return fmt.Sprintf(
-		"Text Data: %s\nMetadata: %s\nPress [Enter] to submit\n",
-		m.data.View(),
+		"File Path: %s\nMetadata: %s\nPress [Enter] to submit\n",
+		m.filePath,
 		m.metadata.View(),
 	)
 }

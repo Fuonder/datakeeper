@@ -8,8 +8,7 @@ import (
 // UploadModel для загрузки нового объекта
 type UploadModel struct {
 	svc        *cliservice.Service
-	objectType string // Тип объекта (login, text, creditcard, file)
-
+	objectType string
 }
 
 func NewUploadModel(svc *cliservice.Service) UploadModel {
@@ -35,16 +34,16 @@ func (m UploadModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "l":
 			m.objectType = "login"
-			return NewLoginForm(m.svc), nil
+			return NewLoginFormUpload(m.svc), nil
 		case "t":
 			m.objectType = "text"
-			return NewTextForm(m.svc), nil
+			return NewTextFormUpload(m.svc), nil
 		case "c":
 			m.objectType = "creditcard"
-			return NewCreditCardForm(m.svc), nil
+			return NewCreditCardFormUpload(m.svc), nil
 		case "f":
 			m.objectType = "file"
-			return NewFileForm(m.svc), nil
+			return NewFileFormUpload(m.svc), nil
 		}
 	}
 

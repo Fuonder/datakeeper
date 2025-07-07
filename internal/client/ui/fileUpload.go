@@ -10,7 +10,6 @@ import (
 	"log"
 )
 
-// Функция для открытия диалога выбора файла через zenity
 func openFileDialog() (string, error) {
 	filePath, err := zenity.SelectFile()
 	if err != nil {
@@ -23,10 +22,10 @@ type FileForm struct {
 	svc            *cliservice.Service
 	metadata       textinput.Model
 	filePath       string
-	isFileSelected bool // Флаг, чтобы знать, что файл уже выбран
+	isFileSelected bool
 }
 
-func NewFileForm(svc *cliservice.Service) FileForm {
+func NewFileFormUpload(svc *cliservice.Service) FileForm {
 	metadata := textinput.New()
 	metadata.Placeholder = "Metadata"
 
@@ -34,7 +33,7 @@ func NewFileForm(svc *cliservice.Service) FileForm {
 		svc:            svc,
 		metadata:       metadata,
 		filePath:       "",
-		isFileSelected: false, // Изначально файл не выбран
+		isFileSelected: false,
 	}
 }
 
@@ -51,7 +50,7 @@ func (m FileForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			if m.isFileSelected {
-				// Сохранение данных, если файл был выбран
+
 				fileData := models.FileData{
 					Path:     m.filePath,
 					Metadata: m.metadata.Value(),
@@ -66,7 +65,7 @@ func (m FileForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err == nil {
 					m.isFileSelected = true
 				}
-				// Если файл не выбран, просим выбрать файл
+
 				return m, nil
 			}
 		case "tab":
@@ -74,14 +73,13 @@ func (m FileForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Обновление полей
 	m.metadata, _ = m.metadata.Update(msg)
 
 	return m, nil
 }
 
 func (m FileForm) View() string {
-	// Отображаем путь к файлу, если он выбран, или сообщение о необходимости выбрать файл
+
 	if m.isFileSelected {
 		return fmt.Sprintf(
 			"File Path: %s\nMetadata: %s\nPress [Enter] to submit\n",

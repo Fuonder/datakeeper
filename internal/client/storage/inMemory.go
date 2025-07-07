@@ -113,3 +113,16 @@ func (s *InMemoryStorage) GetFileItemByIndex(idx int) (models.FileData, error) {
 	}
 	return s.Data.FileObjects[idx], nil
 }
+
+func (s *InMemoryStorage) GetFileObjects() ([]models.FileData, error) {
+	return s.Data.FileObjects, nil
+}
+func (s *InMemoryStorage) GetTextObjects() ([]models.TextData, error) {
+	return s.Data.TextObjects, nil
+}
+func (s *InMemoryStorage) GetLoginObjects() ([]models.LoginData, error) {
+	return s.Data.LoginObjects, nil
+}
+func (s *InMemoryStorage) GetCardObjects() ([]models.CreditCardData, error) {
+	return s.Data.CreditCardObjects, nil
+}

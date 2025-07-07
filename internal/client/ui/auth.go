@@ -20,8 +20,8 @@ type AuthModel struct {
 	password textinput.Model
 	svc      *cliservice.Service
 	user     models.User
-	authMode authMode // Добавляем поле для текущего режима
-	errorMsg string   // Добавляем поле для ошибок
+	authMode authMode
+	errorMsg string
 }
 
 func NewAuthModel(svc *cliservice.Service) AuthModel {
@@ -54,32 +54,28 @@ func (m AuthModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q":
-			// Выход
 			return m, tea.Quit
 		case "enter":
-			// При нажатии Enter выполняем логин или регистрацию в зависимости от выбранного режима
 			m.user.Login = m.login.Value()
 			m.user.PwdHash = m.password.Value()
 
 			var err error
 			if m.authMode == modeRegister {
-				// Регистрация
+
 				err = m.svc.Register(m.user)
 			} else if m.authMode == modeLogin {
-				// Логин
+
 				err = m.svc.Login(m.user)
 			}
 
-			// Если произошла ошибка, возвращаем текущую модель
 			if err != nil {
 				m.errorMsg = err.Error()
 				return m, nil
 			}
 
-			// Переход на главный экран после успешного логина или регистрации
 			return NewMainModel(m.svc), nil
 		case "tab":
-			// Переключение между полями login и password
+
 			if m.login.Focused() {
 				m.login.Blur()
 				m.password.Focus()
@@ -88,17 +84,16 @@ func (m AuthModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.login.Focus()
 			}
 		case "l":
-			// Переключаемся на логин
+
 			m.authMode = modeLogin
 			m.errorMsg = ""
 		case "r":
-			// Переключаемся на регистрацию
+
 			m.authMode = modeRegister
 			m.errorMsg = ""
 		}
 	}
 
-	// Обновляем оба поля
 	m.login, _ = m.login.Update(msg)
 	m.password, _ = m.password.Update(msg)
 	return m, nil
@@ -112,14 +107,12 @@ func (m AuthModel) View() string {
 		modeStr = "Login"
 	}
 
-	// Строим интерфейс в зависимости от текущего режима
 	b := fmt.Sprintf("== %s ==\n\n", modeStr)
 	b += fmt.Sprintf("%s\n%s\n\n", m.login.View(), m.password.View())
 	b += "Press [Tab] to switch input.\n"
 	b += "Press [Enter] to submit.\n"
 	b += "Press [l] to login, [r] to register.\n"
 
-	// Показываем ошибку, если она есть
 	if m.errorMsg != "" {
 		b += fmt.Sprintf("\n[ERROR]: %s\n", m.errorMsg)
 	}
