@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/Fuonder/datakeeper.git/internal/auth"
 	"github.com/Fuonder/datakeeper.git/internal/objects/cards"
+	"github.com/Fuonder/datakeeper.git/internal/objects/files"
 	"github.com/Fuonder/datakeeper.git/internal/objects/logins"
 	"github.com/Fuonder/datakeeper.git/internal/objects/text"
 	"sync"
@@ -20,6 +21,7 @@ type DatabaseServices struct {
 	CardSrv  cards.Service
 	LoginSrv logins.Service
 	TextSrv  text.Service
+	FileSrv  files.Service
 	//WalletSrv wallets.WalletService
 	//OrderSrv  orders.OrderService
 	//AuthSrv   auth.AuthService
@@ -60,6 +62,12 @@ func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (*Database
 		return s, err
 	}
 	s.TextSrv = DBText
+
+	DBFile, err := files.NewDBFiles(db, mu)
+	if err != nil {
+		return s, err
+	}
+	s.FileSrv = DBFile
 
 	return s, nil
 }

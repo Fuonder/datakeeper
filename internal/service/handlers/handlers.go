@@ -11,14 +11,19 @@ import (
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	"github.com/Fuonder/datakeeper.git/internal/models"
 	"github.com/Fuonder/datakeeper.git/internal/objects/cards"
+	"github.com/Fuonder/datakeeper.git/internal/objects/files"
 	"github.com/Fuonder/datakeeper.git/internal/objects/logins"
 	"github.com/Fuonder/datakeeper.git/internal/objects/text"
 	"github.com/Fuonder/datakeeper.git/internal/users"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,6 +34,7 @@ type Handlers struct {
 	cardSrv   cards.Service
 	loginSrv  logins.Service
 	textSrv   text.Service
+	fileSrv   files.Service
 }
 
 func NewHandlers(
@@ -40,7 +46,9 @@ func NewHandlers(
 		cipherSrv: cryptoService,
 		cardSrv:   DBServices.CardSrv,
 		loginSrv:  DBServices.LoginSrv,
-		textSrv:   DBServices.TextSrv} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
+		textSrv:   DBServices.TextSrv,
+		fileSrv:   DBServices.FileSrv,
+	} // TODO: IMPLEMENT ME WHEN ALL SERVICES WILL BE DONE
 
 }
 
@@ -428,7 +436,123 @@ func (h Handlers) GetTextHandlerGet(rw http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) SaveFileHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveFileHandlerPost called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Получаем userID из токена
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte("unauthorized"))
+		return
+	}
+
+	// Получаем multipart reader
+	mr, err := r.MultipartReader()
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("invalid multipart format"))
+		return
+	}
+
+	var fileMeta models.FileData
+	var inputFileMeta models.FileData
+	var tempFile *os.File
+	defer func() {
+		if tempFile != nil {
+			tempFile.Close()
+		}
+	}()
+
+	// Обрабатываем части
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			SendResponse(rw, http.StatusInternalServerError, []byte("failed reading multipart"))
+			return
+		}
+
+		switch part.FormName() {
+		case "meta":
+			// Читаем и расшифровываем метаданные
+			cipherText, err := io.ReadAll(part)
+			if err != nil {
+				SendResponse(rw, http.StatusBadRequest, []byte("failed to read meta"))
+				return
+			}
+
+			plainText, err := h.cipherSrv.Decrypt(cipherText)
+			if err != nil {
+				SendResponse(rw, http.StatusBadRequest, []byte("failed to decrypt meta"))
+				return
+			}
+
+			// Распарсим расшифрованные метаданные
+			err = json.Unmarshal(plainText, &inputFileMeta)
+			if err != nil {
+				SendResponse(rw, http.StatusBadRequest, []byte("failed to unmarshal meta"))
+				return
+			}
+
+		case "file":
+			// Создаем директорию для пользователя
+			userDir := fmt.Sprintf("./files/%d", UID)
+			if err := os.MkdirAll(userDir, os.ModePerm); err != nil {
+				SendResponse(rw, http.StatusInternalServerError, []byte("failed to create dir"))
+				return
+			}
+
+			// Создаем уникальное имя для файла
+			safeName := filepath.Base(part.FileName())
+			fullPath := filepath.Join(userDir, safeName)
+
+			// Сохраняем файл
+			tempFile, err = os.Create(fullPath)
+			if err != nil {
+				SendResponse(rw, http.StatusInternalServerError, []byte("failed to create file"))
+				return
+			}
+
+			if _, err := io.Copy(tempFile, part); err != nil {
+				SendResponse(rw, http.StatusInternalServerError, []byte("failed to write file"))
+				return
+			}
+
+			// Обновляем метаданные файла
+			fileMeta.UserID = UID
+			fileMeta.Path = safeName
+			fileMeta.LastUpdate = time.Now()
+		}
+	}
+	fileMeta.Metadata = inputFileMeta.Metadata
+	fileMeta.ID = inputFileMeta.ID
+	fileExtension := filepath.Ext(fileMeta.Path)                    // Получаем расширение из имени файла
+	fileMeta.FileType = getFileTypeFromExtension(fileExtension[1:]) // Убираем точку перед расширением
+
+	// Сохраняем файл в базе данных
+	resp, err := h.fileSrv.AddOrUpdateFileRecord(ctx, fileMeta)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("db insert/update failed"))
+		return
+	}
+
+	// Шифруем ответ
+	respJsonBytes, err := json.Marshal(resp)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("marshal failed"))
+		return
+	}
+
+	cipherResp, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
+		return
+	}
+
+	// Отправляем зашифрованный ответ
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // GetFileHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -442,8 +566,86 @@ func (h Handlers) SaveFileHandlerPost(rw http.ResponseWriter, r *http.Request) {
 //   - 401 Unauthorized: доступ для данного пользователя заблокирован.
 //   - 500 Internal Server Error: внутренняя ошибка.
 func (h Handlers) GetFileHandlerGet(rw http.ResponseWriter, r *http.Request) {
-	logger.Log.Debug("GetLoginHandlerGet called")
-	http.Error(rw, http.StatusText(http.StatusNotImplemented), http.StatusNotImplemented)
+	logger.Log.Debug("GetFileHandlerGet called")
+
+	fileIDStr := chi.URLParam(r, "object_id")
+	fileID, err := strconv.Atoi(fileIDStr)
+	if err != nil {
+		SendResponse(rw, http.StatusBadRequest, []byte("invalid id"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	UID, err := h.getUserID(ctx, r)
+	if err != nil {
+		SendResponse(rw, http.StatusUnauthorized, []byte{})
+		return
+	}
+
+	fileData, err := h.fileSrv.GetFileRecord(ctx, fileID, UID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("failed to get file metadata"))
+		return
+	}
+
+	fullPath := filepath.Join("./files", fmt.Sprintf("%d", UID), fileData.Path)
+	file, err := os.Open(fullPath)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("file not found"))
+		return
+	}
+	defer file.Close()
+
+	// Create a pipe for the multipart writer
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+
+	rw.Header().Set("Content-Type", writer.FormDataContentType())
+	rw.WriteHeader(http.StatusOK)
+
+	go func() {
+		defer pw.Close()
+		defer writer.Close()
+
+		// part 1: meta
+		metaPart, err := writer.CreateFormField("meta")
+		if err != nil {
+			logger.Log.Error("Failed to create meta form field", zap.Error(err))
+			return
+		}
+
+		metaBytes, err := json.Marshal(fileData)
+		if err != nil {
+			logger.Log.Error("Failed to marshal meta", zap.Error(err))
+			return
+		}
+
+		encryptedMeta, err := h.cipherSrv.Encrypt(metaBytes)
+		if err != nil {
+			logger.Log.Error("Failed to encrypt meta", zap.Error(err))
+			return
+		}
+
+		metaPart.Write(encryptedMeta)
+
+		// part 2: file
+		filePart, err := writer.CreateFormFile("file", fileData.Path)
+		if err != nil {
+			logger.Log.Error("Failed to create file part", zap.Error(err))
+			return
+		}
+
+		if _, err := io.Copy(filePart, file); err != nil {
+			logger.Log.Error("Failed to write file part", zap.Error(err))
+			return
+		}
+	}()
+
+	if _, err := io.Copy(rw, pr); err != nil {
+		logger.Log.Error("Failed to copy pipe to response", zap.Error(err))
+	}
 }
 
 // SaveCardHandlerPost используется для загрузки объекта типа models.CreditCardData на сервер. Принимает данные в
@@ -583,4 +785,36 @@ func (h Handlers) getUserID(ctx context.Context, r *http.Request) (int, error) {
 		return 0, fmt.Errorf("error retrieving user ID: %v", err)
 	}
 	return UID, nil
+}
+
+// getFileTypeFromExtension принимает расширение файла и возвращает его тип.
+func getFileTypeFromExtension(extension string) string {
+	ext := strings.ToLower(extension)
+
+	knownTypes := map[string]string{
+		"png":  "image file (PNG)",
+		"jpg":  "image file (JPEG)",
+		"jpeg": "image file (JPEG)",
+		"mp4":  "video file (MP4)",
+		"svg":  "vector image file (SVG)",
+		"txt":  "text file (plain text)",
+		"py":   "Python source code file",
+		"go":   "Go source code file",
+		"mod":  "Go module file",
+		"sum":  "checksum file",
+		"md":   "Markdown file",
+		"exe":  "Windows executable file",
+		"sh":   "Shell script",
+		"bash": "Shell script (Bash)",
+		"ps1":  "PowerShell script",
+		"bin":  "binary file",
+		"json": "JSON data file",
+		"sql":  "SQL database file",
+	}
+
+	if fileType, exists := knownTypes[ext]; exists {
+		return fileType
+	}
+
+	return "unknown file type"
 }
