@@ -12,13 +12,13 @@ import (
 
 type Service struct {
 	apiSrv     http.Server
-	DBServices *dbservices.DatabaseServices
+	DBServices dbservices.IDatabaseService
 }
 
 func NewService(
 	APIAddr string,
-	DBServices *dbservices.DatabaseServices,
-	cipherService cipher.Service) (*Service, error) {
+	DBServices dbservices.IDatabaseService,
+	cipherService cipher.Encryptor) (*Service, error) {
 
 	h := NewHandlers(DBServices, cipherService)
 	rObj := NewRouterObject(*h)

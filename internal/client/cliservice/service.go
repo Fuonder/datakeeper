@@ -21,7 +21,7 @@ import (
 
 type Service struct {
 	st         *storage.InMemoryStorage
-	cp         cipher.Service
+	cp         cipher.Encryptor
 	remoteAddr string
 	ticker     *time.Ticker
 	client     *resty.Client

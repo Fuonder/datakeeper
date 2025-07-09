@@ -2,64 +2,88 @@ package dbservices
 
 import (
 	"database/sql"
-	auth2 "github.com/Fuonder/datakeeper.git/internal/server/auth"
-	cards2 "github.com/Fuonder/datakeeper.git/internal/server/objects/cards"
-	files2 "github.com/Fuonder/datakeeper.git/internal/server/objects/files"
-	logins2 "github.com/Fuonder/datakeeper.git/internal/server/objects/logins"
-	text2 "github.com/Fuonder/datakeeper.git/internal/server/objects/text"
-	users2 "github.com/Fuonder/datakeeper.git/internal/server/users"
+	auth "github.com/Fuonder/datakeeper.git/internal/server/auth"
+	cards "github.com/Fuonder/datakeeper.git/internal/server/objects/cards"
+	files "github.com/Fuonder/datakeeper.git/internal/server/objects/files"
+	logins "github.com/Fuonder/datakeeper.git/internal/server/objects/logins"
+	text "github.com/Fuonder/datakeeper.git/internal/server/objects/text"
+	users "github.com/Fuonder/datakeeper.git/internal/server/users"
 	"sync"
 )
 
 type DatabaseServices struct {
-	UserSrv  users2.UserService
-	AuthSrv  auth2.Service
-	CardSrv  cards2.Service
-	LoginSrv logins2.Service
-	TextSrv  text2.Service
-	FileSrv  files2.Service
+	UserSrv  users.UserService
+	AuthSrv  auth.Service
+	CardSrv  cards.Service
+	LoginSrv logins.Service
+	TextSrv  text.Service
+	FileSrv  files.Service
 }
 
-func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (*DatabaseServices, error) {
+func NewDatabaseServices(secret []byte, db *sql.DB, mu *sync.RWMutex) (IDatabaseService, error) {
 	s := &DatabaseServices{}
 
-	DBUsers, err := users2.NewDBUsers(db, mu)
+	DBUsers, err := users.NewDBUsers(db, mu)
 	if err != nil {
 		return s, err
 	}
 
-	s.UserSrv = users2.NewUService(DBUsers)
+	s.UserSrv = users.NewUService(DBUsers)
 
-	DBAuth, err := auth2.NewDBAuth(db, mu)
+	DBAuth, err := auth.NewDBAuth(db, mu)
 	if err != nil {
 		return s, err
 	}
 
-	s.AuthSrv = auth2.NewAService(DBUsers, DBAuth, secret)
+	s.AuthSrv = auth.NewAService(DBUsers, DBAuth, secret)
 
-	DBCards, err := cards2.NewDBCards(db, mu)
+	DBCards, err := cards.NewDBCards(db, mu)
 	if err != nil {
 		return s, err
 	}
 	s.CardSrv = DBCards
 
-	DBLogins, err := logins2.NewDBLogins(db, mu)
+	DBLogins, err := logins.NewDBLogins(db, mu)
 	if err != nil {
 		return s, err
 	}
 	s.LoginSrv = DBLogins
 
-	DBText, err := text2.NewDBText(db, mu)
+	DBText, err := text.NewDBText(db, mu)
 	if err != nil {
 		return s, err
 	}
 	s.TextSrv = DBText
 
-	DBFile, err := files2.NewDBFiles(db, mu)
+	DBFile, err := files.NewDBFiles(db, mu)
 	if err != nil {
 		return s, err
 	}
 	s.FileSrv = DBFile
 
 	return s, nil
+}
+
+func (s *DatabaseServices) GetUserService() users.UserService {
+	return s.UserSrv
+}
+
+func (s *DatabaseServices) GetAuthService() auth.Service {
+	return s.AuthSrv
+}
+
+func (s *DatabaseServices) GetCardService() cards.Service {
+	return s.CardSrv
+}
+
+func (s *DatabaseServices) GetLoginService() logins.Service {
+	return s.LoginSrv
+}
+
+func (s *DatabaseServices) GetTextService() text.Service {
+	return s.TextSrv
+}
+
+func (s *DatabaseServices) GetFileService() files.Service {
+	return s.FileSrv
 }

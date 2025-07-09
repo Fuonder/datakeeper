@@ -30,7 +30,7 @@ import (
 type Handlers struct {
 	userSrv   users.UserService
 	authSrv   auth.Service
-	cipherSrv cipher.Service
+	cipherSrv cipher.Encryptor
 	cardSrv   cards.Service
 	loginSrv  logins.Service
 	textSrv   text.Service
@@ -38,16 +38,16 @@ type Handlers struct {
 }
 
 func NewHandlers(
-	DBServices *dbservices.DatabaseServices,
-	cryptoService cipher.Service) *Handlers {
+	DBServices dbservices.IDatabaseService,
+	cryptoService cipher.Encryptor) *Handlers {
 	return &Handlers{
-		userSrv:   DBServices.UserSrv,
-		authSrv:   DBServices.AuthSrv,
+		userSrv:   DBServices.GetUserService(),
+		authSrv:   DBServices.GetAuthService(),
 		cipherSrv: cryptoService,
-		cardSrv:   DBServices.CardSrv,
-		loginSrv:  DBServices.LoginSrv,
-		textSrv:   DBServices.TextSrv,
-		fileSrv:   DBServices.FileSrv,
+		cardSrv:   DBServices.GetCardService(),
+		loginSrv:  DBServices.GetLoginService(),
+		textSrv:   DBServices.GetTextService(),
+		fileSrv:   DBServices.GetFileService(),
 	}
 
 }
@@ -63,23 +63,18 @@ func NewHandlers(
 func (h Handlers) RegisterHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("RegisterHandlerPost called")
 	logger.Log.Debug("reading body")
-	cipherText, err := io.ReadAll(r.Body)
+
+	plainText, err := h.readAndDecryptBody(r)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
-	logger.Log.Debug("Decrypting body")
-	plainText, err := h.cipherSrv.Decrypt(cipherText)
-	if err != nil {
-		logger.Log.Debug("Can not decrypt message", zap.Error(err))
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
-		return
-	}
+
 	logger.Log.Debug("Unmarshalling user object")
-	userObject := models.User{}
-	err = json.Unmarshal(plainText, &userObject)
+
+	userObject, err := h.unmarshalUserObject(plainText)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
 
@@ -124,23 +119,15 @@ func (h Handlers) RegisterHandlerPost(rw http.ResponseWriter, r *http.Request) {
 func (h Handlers) LoginHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("LoginHandlerPost called")
 	logger.Log.Debug("reading body")
-	cipherText, err := io.ReadAll(r.Body)
+	plainText, err := h.readAndDecryptBody(r)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
-	logger.Log.Debug("Decrypting body")
-	plainText, err := h.cipherSrv.Decrypt(cipherText)
+
+	userObject, err := h.unmarshalUserObject(plainText)
 	if err != nil {
-		logger.Log.Debug("Can not decrypt message", zap.Error(err))
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
-		return
-	}
-	logger.Log.Debug("Unmarshalling user object")
-	userObject := models.User{}
-	err = json.Unmarshal(plainText, &userObject)
-	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not unmarshal message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
 
@@ -196,54 +183,25 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		lg   []models.LoginData
-		txt  []models.TextData
-		ccrd []models.CreditCardData
-		f    []models.FileData
-	)
-	if loginData, err := h.loginSrv.GetUserLoginRecords(ctx, userID); err == nil {
-		lg = loginData
+	result, err := h.getUserData(ctx, userID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte("failed to retrieve user data"))
+		return
 	}
 
-	if textData, err := h.textSrv.GetUserTextRecords(ctx, userID); err == nil {
-		txt = textData
-	}
-
-	if cardData, err := h.cardSrv.GetUserCardRecords(ctx, userID); err == nil {
-		ccrd = cardData
-	}
-
-	if fileData, err := h.fileSrv.GetUserFileRecords(ctx, userID); err == nil {
-		f = fileData
-	}
-
-	if len(lg) == 0 && len(txt) == 0 && len(ccrd) == 0 && len(f) == 0 {
+	if len(result.LoginObjects) == 0 && len(result.TextObjects) == 0 && len(result.CreditCardObjects) == 0 && len(result.FileObjects) == 0 {
 		SendResponse(rw, http.StatusNoContent, nil)
 		return
 	}
 
-	result := models.ObjectList{
-		LoginObjects:      lg,
-		TextObjects:       txt,
-		CreditCardObjects: ccrd,
-		FileObjects:       f,
-	}
-
-	jsonBytes, err := json.Marshal(result)
+	cipherResp, err := h.encryptResponse(result)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte("failed to marshal data"))
-		return
-	}
-
-	cipherText, err := h.cipherSrv.Encrypt(jsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte("failed to encrypt data"))
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
 	rw.Header().Set("Content-Type", "application/octet-stream")
-	SendResponse(rw, http.StatusOK, cipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // SaveLoginHandlerPost используется для загрузки объекта типа models.LoginData на сервер. Принимает данные в
@@ -257,17 +215,9 @@ func (h Handlers) DataHandlerGet(rw http.ResponseWriter, r *http.Request) {
 func (h Handlers) SaveLoginHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveLoginHandlerPost called")
 
-	cipherText, err := io.ReadAll(r.Body)
+	plainText, err := h.readAndDecryptBody(r)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
-		return
-	}
-
-	logger.Log.Debug("Decrypting body")
-	plainText, err := h.cipherSrv.Decrypt(cipherText)
-	if err != nil {
-		logger.Log.Debug("Can not decrypt message", zap.Error(err))
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
 
@@ -296,19 +246,13 @@ func (h Handlers) SaveLoginHandlerPost(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respJsonBytes, err := json.Marshal(respLoginObject)
+	cipherResp, err := h.encryptResponse(respLoginObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // GetLoginHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -346,19 +290,13 @@ func (h Handlers) GetLoginHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respJsonBytes, err := json.Marshal(loginObject)
+	cipherResp, err := h.encryptResponse(loginObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // SaveTextHandlerPost используется для загрузки объекта типа models.TextData на сервер. Принимает данные в
@@ -372,17 +310,9 @@ func (h Handlers) GetLoginHandlerGet(rw http.ResponseWriter, r *http.Request) {
 func (h Handlers) SaveTextHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveTextHandlerPost called")
 
-	cipherText, err := io.ReadAll(r.Body)
+	plainText, err := h.readAndDecryptBody(r)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
-		return
-	}
-
-	logger.Log.Debug("Decrypting body")
-	plainText, err := h.cipherSrv.Decrypt(cipherText)
-	if err != nil {
-		logger.Log.Debug("Can not decrypt message", zap.Error(err))
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
 
@@ -411,19 +341,13 @@ func (h Handlers) SaveTextHandlerPost(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respJsonBytes, err := json.Marshal(respTextObject)
+	cipherResp, err := h.encryptResponse(respTextObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // GetTextHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -461,19 +385,13 @@ func (h Handlers) GetTextHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respJsonBytes, err := json.Marshal(textObject)
+	cipherResp, err := h.encryptResponse(textObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // SaveFileHandlerPost используется для загрузки объекта типа models.FileData на сервер. Принимает данные в
@@ -490,118 +408,46 @@ func (h Handlers) SaveFileHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// Получаем userID из токена
 	UID, err := h.getUserID(ctx, r)
 	if err != nil {
 		SendResponse(rw, http.StatusUnauthorized, []byte("unauthorized"))
 		return
 	}
 
-	// Получаем multipart reader
 	mr, err := r.MultipartReader()
 	if err != nil {
 		SendResponse(rw, http.StatusBadRequest, []byte("invalid multipart format"))
 		return
 	}
 
-	var fileMeta models.FileData
-	var inputFileMeta models.FileData
-	var tempFile *os.File
+	fileMeta, inputFileMeta, tempFile, err := h.processMultipartParts(mr, UID)
+	if err != nil {
+		SendResponse(rw, http.StatusInternalServerError, []byte(err.Error()))
+		return
+	}
 	defer func() {
 		if tempFile != nil {
 			tempFile.Close()
 		}
 	}()
 
-	// Обрабатываем части
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			SendResponse(rw, http.StatusInternalServerError, []byte("failed reading multipart"))
-			return
-		}
-
-		switch part.FormName() {
-		case "meta":
-			// Читаем и расшифровываем метаданные
-			cipherText, err := io.ReadAll(part)
-			if err != nil {
-				SendResponse(rw, http.StatusBadRequest, []byte("failed to read meta"))
-				return
-			}
-
-			plainText, err := h.cipherSrv.Decrypt(cipherText)
-			if err != nil {
-				SendResponse(rw, http.StatusBadRequest, []byte("failed to decrypt meta"))
-				return
-			}
-
-			// Распарсим расшифрованные метаданные
-			err = json.Unmarshal(plainText, &inputFileMeta)
-			if err != nil {
-				SendResponse(rw, http.StatusBadRequest, []byte("failed to unmarshal meta"))
-				return
-			}
-
-		case "file":
-			// Создаем директорию для пользователя
-			userDir := fmt.Sprintf("./files/%d", UID)
-			if err := os.MkdirAll(userDir, os.ModePerm); err != nil {
-				SendResponse(rw, http.StatusInternalServerError, []byte("failed to create dir"))
-				return
-			}
-
-			// Создаем уникальное имя для файла
-			safeName := filepath.Base(part.FileName())
-			fullPath := filepath.Join(userDir, safeName)
-
-			// Сохраняем файл
-			tempFile, err = os.Create(fullPath)
-			if err != nil {
-				SendResponse(rw, http.StatusInternalServerError, []byte("failed to create file"))
-				return
-			}
-
-			if _, err := io.Copy(tempFile, part); err != nil {
-				SendResponse(rw, http.StatusInternalServerError, []byte("failed to write file"))
-				return
-			}
-
-			// Обновляем метаданные файла
-			fileMeta.UserID = UID
-			fileMeta.Path = safeName
-			fileMeta.LastUpdate = time.Now()
-		}
-	}
 	fileMeta.Metadata = inputFileMeta.Metadata
 	fileMeta.ID = inputFileMeta.ID
-	fileExtension := filepath.Ext(fileMeta.Path)                    // Получаем расширение из имени файла
-	fileMeta.FileType = getFileTypeFromExtension(fileExtension[1:]) // Убираем точку перед расширением
+	fileExtension := filepath.Ext(fileMeta.Path)
+	fileMeta.FileType = getFileTypeFromExtension(fileExtension[1:])
 
-	// Сохраняем файл в базе данных
 	resp, err := h.fileSrv.AddOrUpdateFileRecord(ctx, fileMeta)
 	if err != nil {
 		SendResponse(rw, http.StatusInternalServerError, []byte("db insert/update failed"))
 		return
 	}
 
-	// Шифруем ответ
-	respJsonBytes, err := json.Marshal(resp)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte("marshal failed"))
-		return
-	}
-
-	cipherResp, err := h.cipherSrv.Encrypt(respJsonBytes)
+	cipherResp, err := h.encryptResponse(resp)
 	if err != nil {
 		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
 
-	// Отправляем зашифрованный ответ
 	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
@@ -710,16 +556,9 @@ func (h Handlers) GetFileHandlerGet(rw http.ResponseWriter, r *http.Request) {
 func (h Handlers) SaveCardHandlerPost(rw http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("SaveCardHandlerPost called")
 	logger.Log.Debug("reading body")
-	cipherText, err := io.ReadAll(r.Body)
+	plainText, err := h.readAndDecryptBody(r)
 	if err != nil {
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not read message"))
-		return
-	}
-	logger.Log.Debug("Decrypting body")
-	plainText, err := h.cipherSrv.Decrypt(cipherText)
-	if err != nil {
-		logger.Log.Debug("Can not decrypt message", zap.Error(err))
-		SendResponse(rw, http.StatusBadRequest, []byte("Can not decrypt message"))
+		SendResponse(rw, http.StatusBadRequest, []byte(err.Error()))
 		return
 	}
 	logger.Log.Debug("Unmarshalling user object")
@@ -747,17 +586,12 @@ func (h Handlers) SaveCardHandlerPost(rw http.ResponseWriter, r *http.Request) {
 		SendResponse(rw, http.StatusInternalServerError, []byte{})
 		return
 	}
-	respJsonBytes, err := json.Marshal(respCardObject)
+	cipherResp, err := h.encryptResponse(respCardObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // GetCardHandlerGet используется для скачивания объекта с сервера. Для объекта необходимо указать
@@ -794,17 +628,12 @@ func (h Handlers) GetCardHandlerGet(rw http.ResponseWriter, r *http.Request) {
 		SendResponse(rw, http.StatusInternalServerError, []byte{})
 		return
 	}
-	respJsonBytes, err := json.Marshal(cardObject)
+	cipherResp, err := h.encryptResponse(cardObject)
 	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
+		SendResponse(rw, http.StatusInternalServerError, []byte("encrypt failed"))
 		return
 	}
-	respCipherText, err := h.cipherSrv.Encrypt(respJsonBytes)
-	if err != nil {
-		SendResponse(rw, http.StatusInternalServerError, []byte{})
-		return
-	}
-	SendResponse(rw, http.StatusOK, respCipherText)
+	SendResponse(rw, http.StatusOK, cipherResp)
 }
 
 // SendResponse вспомогательная функция, предназначенная для формирования http ответа и его отправки.
@@ -837,6 +666,28 @@ func (h Handlers) getUserID(ctx context.Context, r *http.Request) (int, error) {
 	return UID, nil
 }
 
+func (h Handlers) readAndDecryptBody(r *http.Request) ([]byte, error) {
+	cipherText, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("can not read message: %w", err)
+	}
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		return nil, fmt.Errorf("can not decrypt message: %w", err)
+	}
+	return plainText, nil
+}
+
+// unmarshalUserObject десериализует объект User
+func (h Handlers) unmarshalUserObject(plainText []byte) (models.User, error) {
+	userObject := models.User{}
+	err := json.Unmarshal(plainText, &userObject)
+	if err != nil {
+		return userObject, fmt.Errorf("can not unmarshal message: %w", err)
+	}
+	return userObject, nil
+}
+
 // getFileTypeFromExtension принимает расширение файла и возвращает его тип.
 func getFileTypeFromExtension(extension string) string {
 	ext := strings.ToLower(extension)
@@ -867,4 +718,129 @@ func getFileTypeFromExtension(extension string) string {
 	}
 
 	return "unknown file type"
+}
+
+func (h Handlers) getUserData(ctx context.Context, userID int) (models.ObjectList, error) {
+	var (
+		lg   []models.LoginData
+		txt  []models.TextData
+		ccrd []models.CreditCardData
+		f    []models.FileData
+	)
+
+	if loginData, err := h.loginSrv.GetUserLoginRecords(ctx, userID); err == nil {
+		lg = loginData
+	}
+
+	if textData, err := h.textSrv.GetUserTextRecords(ctx, userID); err == nil {
+		txt = textData
+	}
+
+	if cardData, err := h.cardSrv.GetUserCardRecords(ctx, userID); err == nil {
+		ccrd = cardData
+	}
+
+	if fileData, err := h.fileSrv.GetUserFileRecords(ctx, userID); err == nil {
+		f = fileData
+	}
+
+	return models.ObjectList{
+		LoginObjects:      lg,
+		TextObjects:       txt,
+		CreditCardObjects: ccrd,
+		FileObjects:       f,
+	}, nil
+}
+
+// processMultipartParts обрабатывает части multipart-запроса и извлекает метаданные и файл
+func (h Handlers) processMultipartParts(mr *multipart.Reader, UID int) (models.FileData, models.FileData, *os.File, error) {
+	var fileMeta, inputFileMeta models.FileData
+	var tempFile *os.File
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fileMeta, inputFileMeta, nil, fmt.Errorf("failed reading multipart: %w", err)
+		}
+
+		switch part.FormName() {
+		case "meta":
+			plainText, err := h.decryptPart(part)
+			if err != nil {
+				return fileMeta, inputFileMeta, nil, err
+			}
+
+			err = json.Unmarshal(plainText, &inputFileMeta)
+			if err != nil {
+				return fileMeta, inputFileMeta, nil, fmt.Errorf("failed to unmarshal meta: %w", err)
+			}
+
+		case "file":
+			tempFile, err = h.saveFile(part, UID)
+			if err != nil {
+				return fileMeta, inputFileMeta, nil, err
+			}
+
+			fileMeta.UserID = UID
+			fileMeta.Path = filepath.Base(part.FileName())
+			fileMeta.LastUpdate = time.Now()
+		}
+	}
+
+	return fileMeta, inputFileMeta, tempFile, nil
+}
+
+// decryptPart расшифровывает часть данных multipart
+func (h Handlers) decryptPart(part *multipart.Part) ([]byte, error) {
+	cipherText, err := io.ReadAll(part)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read part: %w", err)
+	}
+
+	plainText, err := h.cipherSrv.Decrypt(cipherText)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt part: %w", err)
+	}
+
+	return plainText, nil
+}
+
+// saveFile сохраняет файл на диск
+func (h Handlers) saveFile(part *multipart.Part, UID int) (*os.File, error) {
+	userDir := fmt.Sprintf("./files/%d", UID)
+	if err := os.MkdirAll(userDir, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create dir: %w", err)
+	}
+
+	safeName := filepath.Base(part.FileName())
+	fullPath := filepath.Join(userDir, safeName)
+
+	tempFile, err := os.Create(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file: %w", err)
+	}
+
+	if _, err := io.Copy(tempFile, part); err != nil {
+		return nil, fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return tempFile, nil
+}
+
+// encryptResponse шифрует ответ
+func (h Handlers) encryptResponse(resp interface{}) ([]byte, error) {
+	respJsonBytes, err := json.Marshal(resp)
+	if err != nil {
+		return nil, fmt.Errorf("marshal failed: %w", err)
+	}
+
+	cipherResp, err := h.cipherSrv.Encrypt(respJsonBytes)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt failed: %w", err)
+	}
+
+	return cipherResp, nil
 }

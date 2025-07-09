@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/Fuonder/datakeeper.git/internal/client/cliservice"
 	"github.com/Fuonder/datakeeper.git/internal/client/ui"
+	"github.com/Fuonder/datakeeper.git/internal/config"
 	"github.com/Fuonder/datakeeper.git/internal/logger"
 	tea "github.com/charmbracelet/bubbletea"
 	"go.uber.org/zap"
@@ -12,24 +13,24 @@ import (
 )
 
 func main() {
-	err := parseFlags()
+	flags, err := config.ParseClientFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := logger.Initialize(Flags.LogLevel); err != nil {
+	if err := logger.Initialize(flags.LogLevel); err != nil {
 		panic(fmt.Errorf("method main: %v", err))
 	}
 	logger.Log.Info("Flags parsed",
-		zap.String("flags", Flags.String()))
+		zap.String("flags", flags.String()))
 
 	logger.Log.Info("Starting service")
-	if err = run(); err != nil {
+	if err = run(flags); err != nil {
 		logger.Log.Fatal("", zap.Error(err))
 	}
 }
 
-func run() error {
-	srv, err := cliservice.NewService([]byte(Flags.AESKey), Flags.APIAddr.String(), 5*time.Second)
+func run(flags config.ClientOptions) error {
+	srv, err := cliservice.NewService([]byte(flags.AESKey), flags.APIAddr.String(), 5*time.Second)
 	if err != nil {
 		return err
 	}

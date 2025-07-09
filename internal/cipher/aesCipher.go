@@ -16,7 +16,7 @@ type aes256Cipher struct {
 const blockSize = aes.BlockSize
 
 // NewAES256Cipher creates a new AES256 cipher service with the provided key.
-func NewAES256Cipher(key []byte) (Service, error) {
+func NewAES256Cipher(key []byte) (Encryptor, error) {
 	if len(key) != 32 {
 		return nil, errors.New("invalid key size, must be 32 bytes for AES256")
 	}
